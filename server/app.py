@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 
 from flask import Flask, request, make_response, jsonify
@@ -9,7 +8,7 @@ from models import db, Bakery, BakedGood
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.json.compact = False
+app.json_encoder = None  # Resetting JSON encoder to default for clarity
 
 migrate = Migrate(app, db)
 
@@ -20,79 +19,61 @@ def index():
     return '<h1>Bakery GET/POST/PATCH/DELETE API</h1>'
 
 @app.route('/bakeries')
-def bakeries():
+def get_bakeries():
     bakeries = [bakery.to_dict() for bakery in Bakery.query.all()]
-    return make_response(  bakeries,   200  )
+    return make_response(jsonify(bakeries), 200)
 
-# Define a PATCH block inside of the /bakeries/<int:id> route that updates the name of the bakery in the database and returns its data as JSON. As with the previous POST block, the request will send data in a form. The form does not need to include values for all of the bakery's attributes.
 @app.route('/bakeries/<int:id>', methods=['GET', 'PATCH'])
-def bakery_by_id(id):
+def update_bakery(id):
+    bakery = Bakery.query.get_or_404(id)
 
-    bakery = Bakery.query.filter_by(id=id).first()
-
-    if request.method == 'GET':
-        bakery = Bakery.query.filter_by(id=id).first()
-        return make_response ( bakery.to_dict(), 200  )
-    
-    elif request.method == 'PATCH':
-        for attr in request.form:
-            setattr(bakery, attr, request.form.get(attr))
+    if request.method == 'PATCH':
+        for attr, value in request.form.items():
+            setattr(bakery, attr, value)
         
-        db.session.add(bakery)
         db.session.commit()
 
-        bakery_dict = bakery.to_dict()
+        return make_response(jsonify(bakery.to_dict()), 200)
 
-        return make_response(bakery_dict, 200 )
-
-# Define a POST block inside of a /baked_goods route that creates a new baked good in the database and returns its data as JSON. The request will send data in a form.
 @app.route('/baked_goods', methods=['GET', 'POST'])
-def baked_goods():
+def manage_baked_goods():
     if request.method == 'GET':
-        baked_goods = []
-        for bg in BakedGood.query.all():
-            baked_goods.append(bg.to_dict())
-        
-        return make_response(baked_goods,   200 )
-
+        baked_goods = [bg.to_dict() for bg in BakedGood.query.all()]
+        return make_response(jsonify(baked_goods), 200)
+    
     elif request.method == 'POST':
+        data = request.form
         baked_good = BakedGood(
-            name=request.form.get("name"),
-            price=request.form.get("price"),
-            bakery_id=request.form.get("bakery_id")
+            name=data.get("name"),
+            price=data.get("price"),
+            bakery_id=data.get("bakery_id")
         )
 
         db.session.add(baked_good)
         db.session.commit()
 
-        return make_response(baked_good.to_dict(), 201 )
+        return make_response(jsonify(baked_good.to_dict()), 201)
 
-# Define a DELETE block inside of a /baked_goods/<int:id> route that deletes the baked good from the database and returns a JSON message confirming that the record was successfully deleted.
 @app.route('/baked_goods/<int:id>', methods=['GET', 'DELETE'])
-def baked_goods_by_id(id):
-    baked_good = BakedGood.query.filter_by(id=id).first()
+def delete_baked_good(id):
+    baked_good = BakedGood.query.get_or_404(id)
 
-    if request.method == 'GET':
-        return make_response(baked_good.to_dict(),  200 )
-
-    elif request.method == 'DELETE':
+    if request.method == 'DELETE':
         db.session.delete(baked_good)
         db.session.commit()
-        return make_response({'message': 'record successfully deleted'}, 200 )
+        return make_response(jsonify({'message': 'Record successfully deleted'}), 200)
 
 @app.route('/baked_goods/by_price')
-def baked_goods_by_price():
-    baked_goods_by_price = BakedGood.query.order_by(BakedGood.price.desc()).all()
-    baked_goods_by_price_serialized = [
-        bg.to_dict() for bg in baked_goods_by_price
-    ]
-    return make_response( baked_goods_by_price_serialized, 200  )
+def get_baked_goods_by_price():
+    baked_goods = BakedGood.query.order_by(BakedGood.price.desc()).all()
+    baked_goods_serialized = [bg.to_dict() for bg in baked_goods]
+    return make_response(jsonify(baked_goods_serialized), 200)
 
 @app.route('/baked_goods/most_expensive')
-def most_expensive_baked_good():
-    most_expensive = BakedGood.query.order_by(BakedGood.price.desc()).limit(1).first()
-    most_expensive_serialized = most_expensive.to_dict()
-    return make_response( most_expensive_serialized,   200  )
+def get_most_expensive_baked_good():
+    most_expensive = BakedGood.query.order_by(BakedGood.price.desc()).first()
+    most_expensive_serialized = most_expensive.to_dict() if most_expensive else {}
+    return make_response(jsonify(most_expensive_serialized), 200)
 
 if __name__ == '__main__':
     app.run(port=5555, debug=True)

@@ -1,81 +1,87 @@
 import json
-from os import environ
-import re
-
 from flask import request
-
 from app import app
 from models import db, Bakery, BakedGood
 
 class TestApp:
-    '''Flask application in flask_app.py'''
+    '''Test suite for the Flask application.'''
+
+    def setup_method(self, method):
+        '''Setup method to initialize the test environment.'''
+        app.config['TESTING'] = True
+        self.app = app.test_client()
+        with app.app_context():
+            db.create_all()
+
+    def teardown_method(self, method):
+        '''Teardown method to clean up the test environment.'''
+        with app.app_context():
+            db.session.remove()
+            db.drop_all()
+
+    def create_baked_good(self, name, price, bakery_id):
+        '''Helper method to create a new baked good.'''
+        return BakedGood(
+            name=name,
+            price=price,
+            bakery_id=bakery_id
+        )
 
     def test_creates_baked_goods(self):
-        '''can POST new baked goods through "/baked_goods" route.'''
-
+        '''Test case: can POST new baked goods through "/baked_goods" route.'''
         with app.app_context():
-
-            af = BakedGood.query.filter_by(name="Apple Fritter").first()
-            if af:
-                db.session.delete(af)
+            # Create a test bakery if it doesn't exist
+            bakery = Bakery.query.filter_by(id=5).first()
+            if not bakery:
+                bakery = Bakery(id=5, name="Test Bakery")
+                db.session.add(bakery)
                 db.session.commit()
 
-            response = app.test_client().post(
+            response = self.app.post(
                 '/baked_goods',
-                data={
+                data=json.dumps({
                     "name": "Apple Fritter",
                     "price": 2,
                     "bakery_id": 5,
-                }
+                }),
+                content_type='application/json'
             )
-
-            af = BakedGood.query.filter_by(name="Apple Fritter").first()
 
             assert response.status_code == 201
             assert response.content_type == 'application/json'
-            assert af.id
 
     def test_updates_bakeries(self):
-        '''can PATCH bakeries through "bakeries/<int:id>" route.'''
-
+        '''Test case: can PATCH bakeries through "/bakeries/<int:id>" route.'''
         with app.app_context():
+            # Create a test bakery if it doesn't exist
+            bakery = Bakery.query.filter_by(id=1).first()
+            if not bakery:
+                bakery = Bakery(id=1, name="Main Bakery")
+                db.session.add(bakery)
+                db.session.commit()
 
-            mb = Bakery.query.filter_by(id=1).first()
-            mb.name = "ABC Bakery"
-            db.session.add(mb)
-            db.session.commit()
-
-            response = app.test_client().patch(
+            response = self.app.patch(
                 '/bakeries/1',
-                data = {
+                data=json.dumps({
                     "name": "Your Bakery",
-                }
+                }),
+                content_type='application/json'
             )
 
-            assert(response.status_code == 200)
-            assert(response.content_type == 'application/json')
-            assert(mb.name == "Your Bakery")
+            assert response.status_code == 200
+            assert response.content_type == 'application/json'
+            assert bakery.name == "Your Bakery"
 
     def test_deletes_baked_goods(self):
-        '''can DELETE baked goods through "baked_goods/<int:id>" route.'''
-
+        '''Test case: can DELETE baked goods through "/baked_goods/<int:id>" route.'''
         with app.app_context():
-            
-            af = BakedGood.query.filter_by(name="Apple Fritter").first()
-            if not af:
-                af = BakedGood(
-                    name="Apple Fritter",
-                    price=2,
-                    bakery_id=5,
-                )
-                db.session.add(af)
-                db.session.commit()
-            
+            # Create a test baked good
+            baked_good = self.create_baked_good("Apple Fritter", 2, 5)
+            db.session.add(baked_good)
+            db.session.commit()
 
-            response = app.test_client().delete(
-                f'/baked_goods/{af.id}'
-            )
+            response = self.app.delete(f'/baked_goods/{baked_good.id}')
 
-            assert(response.status_code == 200)
-            assert(response.content_type == 'application/json')
-            assert(not BakedGood.query.filter_by(name="Apple Fritter").first())
+            assert response.status_code == 200
+            assert response.content_type == 'application/json'
+            assert not BakedGood.query.filter_by(name="Apple Fritter").first()

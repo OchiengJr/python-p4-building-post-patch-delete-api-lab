@@ -13,7 +13,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -25,7 +26,11 @@ jobs:
 
       # Secret stored in learn-co-curriculum Settings/Secrets
       - name: Sync from .canvas file
-        run: github-to-canvas -a -lr
+        run: |
+          if ! github-to-canvas -a -lr; then
+            echo "Error: Failed to sync with Canvas"
+            exit 1
+          fi
         env:
           CANVAS_API_KEY: ${{ secrets.CANVAS_API_KEY }}
           CANVAS_API_PATH: ${{ secrets.CANVAS_API_PATH }}
